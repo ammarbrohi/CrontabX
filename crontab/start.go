@@ -5,6 +5,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"time"
 
 	"github.com/SentimensRG/sigctx"
 	"github.com/go-chi/chi"
@@ -12,24 +13,29 @@ import (
 
 	"github.com/titpetric/factory"
 	"github.com/titpetric/factory/resputil"
+
+	migrations "github.com/titpetric/go-web-crontab/db"
 )
 
-func Init() error {
+func Start() error {
+	var ctx = sigctx.New()
+
 	// validate configuration
 	if err := config.Validate(); err != nil {
 		return err
 	}
 
-	// start/configure database connection
-	factory.Database.Add("default", config.db.dsn)
-	db, err := factory.Database.Get()
+	dbOptions := &factory.DatabaseConnectionOptions{
+		DSN:            config.db.dsn,
+		DriverName:     "mysql",
+		Logger:         config.db.logger,
+		Retries:        100,
+		RetryTimeout:   2 * time.Second,
+		ConnectTimeout: 2 * time.Minute,
+	}
+	db, err := factory.Database.TryToConnect(ctx, "default", dbOptions)
 	if err != nil {
 		return err
-	}
-	switch config.db.profiler {
-	case "stdout":
-		db.Profiler = &factory.Database.ProfilerStdout
-		// @todo: profiling as an external service?
 	}
 
 	// configure resputil options
@@ -37,15 +43,13 @@ func Init() error {
 		Pretty: config.http.pretty,
 		Trace:  config.http.tracing,
 		Logger: func(err error) {
-			// @todo: error logging
+			log.Printf("Error from request: %+v", err)
 		},
 	})
 
-	return nil
-}
-
-func Start() error {
-	var ctx = sigctx.New()
+	if err := migrations.Migrate(db); err != nil {
+		return err
+	}
 
 	log.Println("Starting http server on address " + config.http.addr)
 	listener, err := net.Listen("tcp", config.http.addr)

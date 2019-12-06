@@ -2,6 +2,7 @@ package crontab
 
 import (
 	"github.com/pkg/errors"
+	"github.com/titpetric/go-web-crontab/logger"
 )
 
 type CrontabJobs struct {
@@ -50,9 +51,9 @@ func (c *CrontabJobs) Get(id string) (*JobItem, error) {
 	return nil, errors.New("No matching job: " + id)
 }
 
-func (c *CrontabJobs) Logs(id string) ([]Log, error) {
-	logs := []Log{}
-	err := c.cron.db.Select(&logs, "select name, description from logs order by name asc")
+func (c *CrontabJobs) Logs(id string) ([]logger.LogEntry, error) {
+	logs := []logger.LogEntry{}
+	err := c.cron.db.Select(&logs, "select * from logs order by name asc")
 	return logs, err
 }
 
